@@ -14,7 +14,7 @@ build/xmpp-bridge: $(patsubst src/%.c,build/%.o,$(wildcard src/*.c))
 	$(CC) $(LDFLAGS) -o $@ $^
 
 install: build/xmpp-bridge
-	install -D -m 0755 build/xmpp-bridge "$(DESTDIR)/usr/bin/xmpp-bridge"
-	install -D -m 0644 xmpp-bridge.1     "$(DESTDIR)/usr/share/man/man1/xmpp-bridge.1"
+	install -D -m 0755 build/xmpp-bridge "$(DESTDIR)/bin/xmpp-bridge"
+	install -D -m 0644 xmpp-bridge.1     "$(DESTDIR)/share/man/man1/xmpp-bridge.1"
 
 .PHONY: all install
