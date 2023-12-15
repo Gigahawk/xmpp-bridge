@@ -124,7 +124,6 @@ void conn_handler(xmpp_conn_t* const conn, const xmpp_conn_event_t event, const 
 
 #define STDIN  0
 #define STDOUT 1
-#define STDERR 2
 
 int main(int argc, char** argv) {
     //read arguments
@@ -145,7 +144,7 @@ int main(int argc, char** argv) {
 
     //initialize file handles
     struct IO io;
-    io_init(&io, STDIN, STDOUT, STDERR);
+    io_init(&io, STDIN, STDOUT);
     cfg.io = &io;
 
     //drop privileges
@@ -191,36 +190,6 @@ int main(int argc, char** argv) {
             char* str = io_getlines(&io);
             if (str == NULL) {
                 if (io.eof) {
-                    //EOF has been reached - commence normal shutdown
-                    xmpp_disconnect(conn);
-                    stay_in_loop = false;
-                }
-            } else {
-                //send message
-                xmpp_stanza_t* reply = xmpp_stanza_new(cfg.ctx);
-                xmpp_stanza_set_name(reply, "message");
-                xmpp_stanza_set_type(reply, "chat");
-                xmpp_stanza_set_attribute(reply, "from", cfg.jid);
-                xmpp_stanza_set_attribute(reply, "to", cfg.peer_jid);
-
-                xmpp_stanza_t* body = xmpp_stanza_new(cfg.ctx);
-                xmpp_stanza_set_name(body, "body");
-
-                xmpp_stanza_t* text = xmpp_stanza_new(cfg.ctx);
-                xmpp_stanza_set_text(text, str);
-
-                xmpp_stanza_add_child(body, text);
-                xmpp_stanza_add_child(reply, body);
-
-                xmpp_send(conn, reply);
-                xmpp_stanza_release(reply);
-                free(str);
-            }
-
-            //check if one or multiple full lines were received
-            str = io_getlines_err(&io);
-            if (str == NULL) {
-                if (io.err_eof) {
                     //EOF has been reached - commence normal shutdown
                     xmpp_disconnect(conn);
                     stay_in_loop = false;

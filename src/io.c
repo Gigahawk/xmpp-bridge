@@ -44,21 +44,16 @@ static void buf_try_shrink(struct Buffer* buf) {
     }
 }
 
-bool io_init(struct IO* io, int in_fd, int out_fd, int err_fd) {
+bool io_init(struct IO* io, int in_fd, int out_fd) {
     io->in_fd            = in_fd;
     io->out_fd           = out_fd;
-    io->err_fd           = err_fd;
     io->in_buf.buffer    = NULL; //allocated on first use
     io->in_buf.size      = 0;
     io->in_buf.capacity  = 0;
     io->out_buf.buffer   = NULL; //allocated on first use
     io->out_buf.size     = 0;
     io->out_buf.capacity = 0;
-    io->err_buf.buffer   = NULL; //allocated on first use
-    io->err_buf.size     = 0;
-    io->err_buf.capacity = 0;
     io->eof              = false;
-    io->err_eof          = false;
 
     //try to make out_fd nonblocking, which will be useful
     const int flags = fcntl(out_fd, F_GETFL, 0);
@@ -110,38 +105,6 @@ static bool io_perform_read(struct IO* io) {
     }
 }
 
-static bool io_perform_read_err(struct IO* io) {
-    //make sure that the buffer has at least READ_SIZE additional capacity
-    if (io->err_buf.capacity < io->err_buf.size + READ_SIZE) {
-        io->err_buf.capacity = io->err_buf.size + READ_SIZE;
-        io->err_buf.buffer   = realloc(io->err_buf.buffer, io->err_buf.capacity + 1); //+1 for NUL byte
-    }
-
-    //read into the buffer
-    const ssize_t bytes_read = read(io->err_fd,
-                                    io->err_buf.buffer + io->err_buf.size,
-                                    io->err_buf.capacity - io->err_buf.size);
-    if (bytes_read == -1) {
-        if (errno == EINTR) {
-            //restart call
-            return io_perform_read_err(io);
-        }
-        perror("read()");
-        return false;
-    }
-    else if (bytes_read == 0) {
-        //EOF reached - return true once more to send the last (potentially
-        //unterminated) line
-        io->err_eof = true;
-        return true;
-    }
-    else {
-        io->err_buf.size += bytes_read;
-        io->err_buf.buffer[io->err_buf.size] = '\0'; //ensure that buffer is NUL-termerrated
-        return true;
-    }
-}
-
 static bool io_perform_write(struct IO* io, size_t write_count) {
     if (write_count == 0) {
         //invalid argument
@@ -177,7 +140,7 @@ static bool io_perform_write(struct IO* io, size_t write_count) {
 }
 
 bool io_select(struct IO* io, int usec) {
-    if (io->eof && io->err_eof) {
+    if (io->eof) {
         return false;
     }
 
@@ -187,10 +150,10 @@ bool io_select(struct IO* io, int usec) {
     FD_ZERO(&in_fds);
     FD_ZERO(&out_fds);
     FD_SET(io->in_fd, &in_fds);
-    FD_SET(io->err_fd, &in_fds);
-    int fd_count = 3;
+    int fd_count = 1;
     if (io->out_buf.size > 0) {
         FD_SET(io->out_fd, &out_fds);
+        fd_count = 2;
     }
 
     struct timeval tv;
@@ -206,11 +169,6 @@ bool io_select(struct IO* io, int usec) {
     //perform all IO operations that have become possible
     if (FD_ISSET(io->in_fd, &in_fds)) {
         if (!io_perform_read(io)) {
-            return false;
-        }
-    }
-    if (FD_ISSET(io->err_fd, &in_fds)) {
-        if (!io_perform_read_err(io)) {
             return false;
         }
     }
@@ -256,49 +214,6 @@ char* io_getlines(struct IO* io) {
     io->in_buf.size -= remove_size;
     memmove(io->in_buf.buffer, io->in_buf.buffer + remove_size, io->in_buf.size + 1); //+1 for NUL byte
     buf_try_shrink(&(io->in_buf));
-
-    //return only non-empty lines
-    if (result_size == 0) {
-        free(result);
-        return NULL;
-    }
-    return result;
-}
-
-char* io_getlines_err(struct IO* io) {
-    if (io->err_buf.buffer == NULL) {
-        return NULL;
-    }
-
-    //find line terminator
-    char* nl_pos = strrchr(io->err_buf.buffer, '\n');
-    if (nl_pos == NULL) {
-        //no full line - wait for the rest
-        if (!io->err_eof) {
-            return NULL;
-        }
-
-        //after EOF, return the rest of the buffer
-        if (io->err_buf.size == 0) {
-            return NULL;
-        }
-        char* result = io->err_buf.buffer;
-        io->err_buf.buffer = NULL;
-        io->err_buf.size = io->err_buf.capacity = 0;
-        return result;
-    }
-
-    //prepare return value
-    const size_t result_size = nl_pos - io->err_buf.buffer;
-    char* result = (char*) malloc(result_size + 1); //+1 for NUL byte
-    memcpy(result, io->err_buf.buffer, result_size);
-    result[result_size] = '\0';
-
-    //remove this line from the buffer
-    const size_t remove_size = result_size + 1; //+1 for '\n'
-    io->err_buf.size -= remove_size;
-    memmove(io->err_buf.buffer, io->err_buf.buffer + remove_size, io->err_buf.size + 1); //+1 for NUL byte
-    buf_try_shrink(&(io->err_buf));
 
     //return only non-empty lines
     if (result_size == 0) {
