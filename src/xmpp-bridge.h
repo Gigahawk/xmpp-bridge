@@ -67,14 +67,14 @@ struct Buffer {
 };
 
 struct IO {
-    int in_fd, out_fd;
-    struct Buffer in_buf, out_buf;
-    bool eof;
+    int in_fd, out_fd, err_fd;
+    struct Buffer in_buf, out_buf, err_buf;
+    bool eof, err_eof;
 };
 
 ///Setup an empty @a buffer to read from the given @a fd.
 ///@return false on error
-bool io_init(struct IO* io, int in_fd, int out_fd);
+bool io_init(struct IO* io, int in_fd, int out_fd, int err_fd);
 
 ///Wait for at most @a usec milliseconds, and perform a single read() on the @a
 ///in_fd and a write() on the @a out_fd if they become available within the
@@ -96,6 +96,7 @@ void io_write(struct IO* io, const char* data, size_t count);
 ///Returns NULL if no full line is available. The caller must free() the
 ///returned pointer.
 char* io_getlines(struct IO* io);
+char* io_getlines_err(struct IO* io);
 
 /***** jid.c *****/
 
