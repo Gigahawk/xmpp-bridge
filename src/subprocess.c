@@ -26,6 +26,7 @@
 
 #define STDIN  0
 #define STDOUT 1
+#define STDERR 2
 
 #define MUST_SUCCEED(action) if ((action) < 0) { perror(#action); return false; }
 
@@ -67,6 +68,7 @@ bool subprocess_init(int argc, char** argv, pid_t* pid) {
 bool subprocess_setup_child(int argc, char** argv, int fds[4]) {
     MUST_SUCCEED(dup2(fds[0], STDIN));
     MUST_SUCCEED(dup2(fds[3], STDOUT));
+    MUST_SUCCEED(dup2(fds[3], STDERR));
     for (int i = 0; i < 4; ++i) {
         MUST_SUCCEED(close(fds[i]));
     }
